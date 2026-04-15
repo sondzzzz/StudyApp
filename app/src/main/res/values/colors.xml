@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="purple_primary">#6C63FF</color>
+    <color name="purple_dark">#4A3AFF</color>
+    <color name="purple_light">#F0EEFF</color>
+    <color name="text_color_primary">#1D1D1D</color>
+    <color name="text_color_secondary">#757575</color>
+    <color name="streak_bg">#FFF0E0</color>
+    <color name="streak_text">#FF9800</color>
+    <color name="progress_bg">#E0E0E0</color>
+    <color name="card_bg">#FFFFFF</color>
+</resources>

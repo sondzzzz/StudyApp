@@ -1,0 +1,38 @@
+<resources>
+    <string name="app_name">EduPro</string>
+    <string name="good_morning">Chào buổi sáng,</string>
+    <string name="good_afternoon">Chào buổi chiều,</string>
+    <string name="good_evening">Chào buổi tối,</string>
+    <string name="user_name">Sơn</string>
+    <string name="streak_format">🔥 %1$d ngày liên tiếp</string>
+    <string name="xp_progress_format">%1$d / %2$d XP</string>
+    <string name="level_format">Cấp độ %1$d</string>
+    <string name="goal_fraction_format">%1$d/%2$d</string>
+    <string name="time_format">%1$d\'</string>
+    <string name="continue_learning">Tiếp tục học</string>
+    <string name="currently_learning">Đang học</string>
+    <string name="web_security">Bảo mật Web</string>
+    <string name="lesson_progress_format">⚡ Bài %1$d/%2$d - %3$d%% hoàn thành</string>
+    <string name="daily_goals">Mục tiêu hôm nay</string>
+    <string name="lessons">Bài học</string>
+    <string name="flashcards">Flashcards</string>
+    <string name="quiz">Quiz</string>
+    <string name="time">Thời gian</string>
+    <string name="python_advanced">Python Nâng cao</string>
+    <string name="java_basic">Java Cơ bản</string>
+
+    <string name="nav_home">Trang chủ</string>
+    <string name="nav_courses">Khóa học</string>
+    <string name="nav_quiz">Quiz</string>
+    <string name="nav_flashcard">Flashcard</string>
+    <string name="nav_profile">Hồ sơ</string>
+    <string name="title_courses">Màn hình Khóa học</string>
+    <string name="title_quiz">Màn hình Quiz</string>
+    <string name="title_flashcard">Màn hình Flashcard</string>
+    <string name="title_profile">Màn hình Hồ sơ</string>
+
+    <string name="edit_goal_title">Đặt mục tiêu %1$s</string>
+    <string name="edit_goal_description">Nhập số lượng %1$s bạn muốn hoàn thành trong hôm nay.</string>
+    <string name="save">Lưu</string>
+    <string name="cancel">Hủy</string>
+</resources>
