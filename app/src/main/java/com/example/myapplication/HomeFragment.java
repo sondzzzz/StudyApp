@@ -1,6 +1,7 @@
 package com.example.myapplication;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -114,7 +115,12 @@ public class HomeFragment extends Fragment {
         if (user != null) {
             db.collection("users").document(user.getUid())
                 .update(field, value)
-                .addOnSuccessListener(aVoid -> loadDataFromFirebase());
+                .addOnSuccessListener(aVoid -> loadDataFromFirebase())
+                .addOnFailureListener(e -> {
+                        // Nếu lỗi do kết nối Firebase (ví dụ: UNAVAILABLE)
+                        Intent intent = new Intent(getContext(), NoInternetActivity.class);
+                        startActivity(intent);
+                });;
         }
     }
 

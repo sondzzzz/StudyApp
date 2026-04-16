@@ -1,6 +1,8 @@
 package com.example.myapplication;
 
+import android.content.IntentFilter;
 import android.graphics.Color;
+import android.net.ConnectivityManager;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
@@ -17,6 +19,24 @@ import androidx.fragment.app.FragmentTransaction;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 public class MainActivity extends AppCompatActivity {
+
+    private NetworkChangeReceiver networkReceiver;
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        networkReceiver = new NetworkChangeReceiver();
+        IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+        registerReceiver(networkReceiver, filter);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (networkReceiver != null) {
+            unregisterReceiver(networkReceiver);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
