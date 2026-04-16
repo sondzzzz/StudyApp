@@ -34,7 +34,7 @@ public class ProfileFragment extends Fragment {
         db = FirebaseFirestore.getInstance();
 
         tvFullName = view.findViewById(R.id.tv_profile_name);
-        tvEmail = view.findViewById(R.id.tv_profile_username); // Reusing this ID for email
+        tvEmail = view.findViewById(R.id.tv_profile_username);
         btnLogout = view.findViewById(R.id.btn_logout);
 
         loadUserDataFromFirebase();

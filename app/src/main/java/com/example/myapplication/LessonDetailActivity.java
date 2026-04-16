@@ -48,7 +48,6 @@ public class LessonDetailActivity extends AppCompatActivity {
     }
 
     private void loadLessonData() {
-        // Sanitize course name to match the Document ID logic used in MainActivity sync
         String safeCourseName = courseName.replace("/", "_");
         String docId = safeCourseName + "_L" + lessonNumber;
 

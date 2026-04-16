@@ -34,7 +34,7 @@ public class RegisterActivity extends AppCompatActivity {
         db = FirebaseFirestore.getInstance();
 
         etFullName = findViewById(R.id.et_register_fullname);
-        etEmail = findViewById(R.id.et_register_username); // Map to Email
+        etEmail = findViewById(R.id.et_register_username);
         etPassword = findViewById(R.id.et_register_password);
         btnRegister = findViewById(R.id.btn_register);
         tvLoginLink = findViewById(R.id.tv_login_link);
