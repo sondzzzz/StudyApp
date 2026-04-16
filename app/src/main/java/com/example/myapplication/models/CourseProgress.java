@@ -12,7 +12,7 @@ public class CourseProgress implements Serializable {
     private int iconResId;
     private long lastAccessed;
 
-    // Firebase requires a no-argument constructor
+
     public CourseProgress() {
     }
 
