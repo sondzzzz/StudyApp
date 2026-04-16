@@ -5,6 +5,8 @@ public class AvailableCourse {
     private int totalLessons;
     private int iconResId;
 
+    public AvailableCourse() {}
+
     public AvailableCourse(String name, int totalLessons, int iconResId) {
         this.name = name;
         this.totalLessons = totalLessons;

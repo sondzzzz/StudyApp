@@ -1,16 +1,16 @@
 package com.example.myapplication.models;
 
-import androidx.room.Entity;
-import androidx.room.PrimaryKey;
+import java.io.Serializable;
 
-@Entity(tableName = "lessons")
-public class Lesson {
-    @PrimaryKey(autoGenerate = true)
+public class Lesson implements Serializable {
     private int id;
     private String courseName;
     private int lessonNumber;
     private String title;
     private String content;
+
+    // Required for Firebase
+    public Lesson() {}
 
     public Lesson(String courseName, int lessonNumber, String title, String content) {
         this.courseName = courseName;
@@ -22,7 +22,11 @@ public class Lesson {
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
     public String getCourseName() { return courseName; }
+    public void setCourseName(String courseName) { this.courseName = courseName; }
     public int getLessonNumber() { return lessonNumber; }
+    public void setLessonNumber(int lessonNumber) { this.lessonNumber = lessonNumber; }
     public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
     public String getContent() { return content; }
+    public void setContent(String content) { this.content = content; }
 }

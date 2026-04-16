@@ -6,62 +6,63 @@ import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
-import com.example.myapplication.database.AppDatabase;
-import com.example.myapplication.models.User;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.firebase.auth.FirebaseAuth;
 
 public class LoginActivity extends AppCompatActivity {
 
-    private TextInputEditText etUsername, etPassword;
+    private TextInputEditText etEmail, etPassword;
     private MaterialButton btnLogin;
     private TextView tvRegisterLink;
+    private FirebaseAuth mAuth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Kiểm tra xem đăng nhập chưa
-        SharedPreferences prefs = getSharedPreferences("user_prefs", MODE_PRIVATE);
-        int userId = prefs.getInt("user_id", -1);
-        if (userId != -1) {
+        // Initialize Firebase Auth
+        mAuth = FirebaseAuth.getInstance();
+
+        // Kiểm tra xem đã đăng nhập chưa (Firebase tự quản lý session)
+        if (mAuth.getCurrentUser() != null) {
             startMainActivity();
             return;
         }
 
         setContentView(R.layout.activity_login);
 
-        etUsername = findViewById(R.id.et_username);
+        etEmail = findViewById(R.id.et_username); // Map to Email
         etPassword = findViewById(R.id.et_password);
         btnLogin = findViewById(R.id.btn_login);
         tvRegisterLink = findViewById(R.id.tv_register_link);
 
         btnLogin.setOnClickListener(v -> {
-            String username = etUsername.getText().toString().trim();
+            String email = etEmail.getText().toString().trim();
             String password = etPassword.getText().toString().trim();
 
-            if (username.isEmpty() || password.isEmpty()) {
-                Toast.makeText(this, "Vui lòng nhập đầy đủ thông tin", Toast.LENGTH_SHORT).show();
+            if (email.isEmpty() || password.isEmpty()) {
+                Toast.makeText(this, "Vui lòng nhập email và mật khẩu", Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            // Kiểm tra đăng nhập dưới nền
-            AppDatabase.databaseWriteExecutor.execute(() -> {
-                User user = AppDatabase.getInstance(this).appDao().login(username, password);
-                runOnUiThread(() -> {
-                    if (user != null) {
-                        // Lưu phiên đăng nhập
-                        SharedPreferences.Editor editor = prefs.edit();
-                        editor.putInt("user_id", user.getId());
-                        editor.apply();
-
+            // Firebase Login
+            mAuth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
                         Toast.makeText(this, "Đăng nhập thành công!", Toast.LENGTH_SHORT).show();
+                        
+                        // Lưu UID vào SharedPreferences nếu cần cho các logic cũ
+                        String uid = mAuth.getCurrentUser().getUid();
+                        SharedPreferences prefs = getSharedPreferences("user_prefs", MODE_PRIVATE);
+                        prefs.edit().putString("user_uid", uid).apply();
+
                         startMainActivity();
                     } else {
-                        Toast.makeText(this, "Sai tài khoản hoặc mật khẩu", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "Đăng nhập thất bại: " + task.getException().getMessage(), 
+                                Toast.LENGTH_SHORT).show();
                     }
                 });
-            });
         });
 
         tvRegisterLink.setOnClickListener(v -> {

@@ -12,28 +12,38 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
-import com.example.myapplication.database.AppDatabase;
 import com.example.myapplication.models.User;
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 public class ProfileFragment extends Fragment {
 
-    private TextView tvFullName, tvUsername;
+    private TextView tvFullName, tvEmail;
     private MaterialButton btnLogout;
+    private FirebaseAuth mAuth;
+    private FirebaseFirestore db;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_profile, container, false);
 
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
+
         tvFullName = view.findViewById(R.id.tv_profile_name);
-        tvUsername = view.findViewById(R.id.tv_profile_username);
+        tvEmail = view.findViewById(R.id.tv_profile_username); // Reusing this ID for email
         btnLogout = view.findViewById(R.id.btn_logout);
 
-        loadUserData();
+        loadUserDataFromFirebase();
 
         btnLogout.setOnClickListener(v -> {
-            // Xóa session
+            // Firebase Sign Out
+            mAuth.signOut();
+
+            // Xóa session local
             SharedPreferences prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE);
             prefs.edit().clear().apply();
 
@@ -46,20 +56,20 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
-    private void loadUserData() {
-        SharedPreferences prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE);
-        int userId = prefs.getInt("user_id", -1);
+    private void loadUserDataFromFirebase() {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        if (firebaseUser != null) {
+            String email = firebaseUser.getEmail();
+            tvEmail.setText(email);
 
-        if (userId != -1) {
-            AppDatabase.databaseWriteExecutor.execute(() -> {
-                User user = AppDatabase.getInstance(requireContext()).appDao().getUserById(userId);
-                if (user != null && getActivity() != null) {
-                    getActivity().runOnUiThread(() -> {
-                        tvFullName.setText(user.getFullName());
-                        tvUsername.setText("@" + user.getUsername());
-                    });
-                }
-            });
+            db.collection("users").document(firebaseUser.getUid())
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists() && isAdded()) {
+                        String fullName = documentSnapshot.getString("fullName");
+                        tvFullName.setText(fullName);
+                    }
+                });
         }
     }
 }

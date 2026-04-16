@@ -1,17 +1,14 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.google.services)
 }
 
 android {
     namespace = "com.example.myapplication"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.myapplication"
+        applicationId = "com.example.myapplication3"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -41,9 +38,18 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
 
-    // Room Database
-    implementation(libs.room.runtime)
-    annotationProcessor(libs.room.compiler)
+    // Room Database (Removed - Migrated to Firebase)
+    // implementation(libs.room.runtime)
+    // annotationProcessor(libs.room.compiler)
+
+    // Firebase
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+
+    // GSON for JSON parsing
+    implementation("com.google.code.gson:gson:2.10.1")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

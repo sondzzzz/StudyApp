@@ -1,11 +1,8 @@
 package com.example.myapplication.models;
 
-import androidx.room.Entity;
-import androidx.room.PrimaryKey;
+import java.io.Serializable;
 
-@Entity(tableName = "users")
-public class User {
-    @PrimaryKey(autoGenerate = true)
+public class User implements Serializable {
     private int id;
     private String username;
     private String password;
@@ -22,6 +19,8 @@ public class User {
     private int flashcardsDoneToday = 0;
     private int quizDoneToday = 0;
     private String lastActiveDate;
+
+    public User() {}
 
     public User(String username, String password, String fullName, int streak, int currentXp, int maxXp, int level) {
         this.username = username;

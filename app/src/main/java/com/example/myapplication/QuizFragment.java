@@ -17,14 +17,18 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.myapplication.database.AppDatabase;
 import com.example.myapplication.models.CourseProgress;
 import com.example.myapplication.models.QuizQuestion;
-import com.example.myapplication.models.User;
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class QuizFragment extends Fragment {
 
@@ -44,11 +48,17 @@ public class QuizFragment extends Fragment {
     private int currentQuestionIndex = 0;
     private int score = 0;
     private String currentCourseName = "";
+    
+    private FirebaseFirestore db;
+    private FirebaseAuth mAuth;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_quiz, container, false);
+
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
 
         layoutCourseList = view.findViewById(R.id.layout_course_list);
         layoutQuizQuestion = view.findViewById(R.id.layout_quiz_question);
@@ -64,7 +74,6 @@ public class QuizFragment extends Fragment {
         options[3] = view.findViewById(R.id.btn_option_4);
         btnCheck = view.findViewById(R.id.btn_next_question);
 
-        // Result IDs
         tvResultTitle = view.findViewById(R.id.tv_result_title);
         tvResultScore = view.findViewById(R.id.tv_result_score);
         tvResultXp = view.findViewById(R.id.tv_result_xp);
@@ -73,34 +82,42 @@ public class QuizFragment extends Fragment {
         btnFinishQuiz = view.findViewById(R.id.btn_finish_quiz);
 
         rvQuizCourses.setLayoutManager(new LinearLayoutManager(getContext()));
-        loadEnrolledCourses();
+        loadEnrolledCoursesFromFirebase();
 
         btnFinishQuiz.setOnClickListener(v -> {
             layoutQuizResult.setVisibility(View.GONE);
             layoutCourseList.setVisibility(View.VISIBLE);
-            loadEnrolledCourses();
+            loadEnrolledCoursesFromFirebase();
         });
 
         return view;
     }
 
-    private void loadEnrolledCourses() {
-        SharedPreferences prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE);
-        int userId = prefs.getInt("user_id", -1);
-        if (userId == -1) return;
+    private void loadEnrolledCoursesFromFirebase() {
+        FirebaseUser user = mAuth.getCurrentUser();
+        if (user == null) return;
 
-        AppDatabase db = AppDatabase.getInstance(requireContext());
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            List<CourseProgress> courses = db.appDao().getCoursesByUserId(userId);
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    QuizCourseAdapter adapter = new QuizCourseAdapter(courses, course -> {
-                        startQuiz(course.getCourseName());
-                    });
+        db.collection("users").document(user.getUid())
+            .collection("course_progress")
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                List<CourseProgress> courses = new ArrayList<>();
+                for (DocumentSnapshot doc : queryDocumentSnapshots) {
+                    CourseProgress cp = new CourseProgress(
+                            0,
+                            doc.getString("courseName"),
+                            doc.getLong("currentLesson").intValue(),
+                            doc.getLong("totalLessons").intValue(),
+                            doc.getLong("percentComplete").intValue(),
+                            doc.getLong("iconResId").intValue()
+                    );
+                    courses.add(cp);
+                }
+                if (isAdded()) {
+                    QuizCourseAdapter adapter = new QuizCourseAdapter(courses, course -> startQuiz(course.getCourseName()));
                     rvQuizCourses.setAdapter(adapter);
-                });
-            }
-        });
+                }
+            });
     }
 
     private void startQuiz(String courseName) {
@@ -108,11 +125,11 @@ public class QuizFragment extends Fragment {
         currentQuestionIndex = 0;
         score = 0;
 
-        AppDatabase db = AppDatabase.getInstance(requireContext());
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            questionList = db.appDao().getQuestionsByCourse(courseName);
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
+        db.collection("quiz_questions")
+                .whereEqualTo("courseName", courseName)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    questionList = queryDocumentSnapshots.toObjects(QuizQuestion.class);
                     if (!questionList.isEmpty()) {
                         layoutCourseList.setVisibility(View.GONE);
                         layoutQuizResult.setVisibility(View.GONE);
@@ -121,9 +138,10 @@ public class QuizFragment extends Fragment {
                     } else {
                         Toast.makeText(getContext(), "Khóa học này chưa có câu hỏi Quiz!", Toast.LENGTH_SHORT).show();
                     }
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(getContext(), "Lỗi tải câu hỏi: " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 });
-            }
-        });
     }
 
     private void displayQuestion() {
@@ -196,7 +214,7 @@ public class QuizFragment extends Fragment {
             tvResultStatus.setText("ĐẠT");
             tvResultStatus.setTextColor(Color.parseColor("#4CAF50"));
             ivResultIcon.setImageResource(android.R.drawable.btn_star_big_on);
-            updateUserXPAndProgress(xpEarned);
+            updateUserFirebaseAfterQuiz(xpEarned);
         } else {
             tvResultTitle.setText("Tiếc quá!");
             tvResultStatus.setText("CHƯA ĐẠT");
@@ -205,32 +223,63 @@ public class QuizFragment extends Fragment {
         }
     }
 
-    private void updateUserXPAndProgress(int xpToAdd) {
-        SharedPreferences prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE);
-        int userId = prefs.getInt("user_id", -1);
-        
-        AppDatabase db = AppDatabase.getInstance(requireContext());
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            User user = db.appDao().getUserById(userId);
-            if (user != null) {
-                user.setCurrentXp(user.getCurrentXp() + xpToAdd);
-                if (user.getCurrentXp() >= user.getMaxXp()) {
-                    user.setLevel(user.getLevel() + 1);
-                    user.setCurrentXp(user.getCurrentXp() - user.getMaxXp());
-                    user.setMaxXp(user.getMaxXp() + 500);
+    private void updateUserFirebaseAfterQuiz(int xpToAdd) {
+        FirebaseUser user = mAuth.getCurrentUser();
+        if (user == null) return;
+
+        String uid = user.getUid();
+
+        // 1. Cập nhật User
+        db.collection("users").document(uid).get().addOnSuccessListener(doc -> {
+            if (doc.exists()) {
+                long currentXp = doc.getLong("currentXp");
+                long maxXp = doc.getLong("maxXp");
+                long level = doc.getLong("level");
+                long quizDoneToday = doc.contains("quizDoneToday") ? doc.getLong("quizDoneToday") : 0;
+
+                long newXp = currentXp + xpToAdd;
+                long newQuizDone = quizDoneToday + 1;
+                long newLevel = level;
+                long newMaxXp = maxXp;
+
+                if (newXp >= maxXp) {
+                    newLevel++;
+                    newXp = 0;
+                    newMaxXp += 500;
                 }
-                user.setQuizDoneToday(user.getQuizDoneToday() + 1);
-                db.appDao().updateUser(user);
-            }
-            
-            CourseProgress cp = db.appDao().getCourseProgress(userId, currentCourseName);
-            if (cp != null) {
-                cp.setCurrentLesson(cp.getCurrentLesson() + 1);
-                int percent = (cp.getCurrentLesson() * 100) / cp.getTotalLessons();
-                cp.setPercentComplete(Math.min(percent, 100));
-                db.appDao().updateCourse(cp);
+
+                Map<String, Object> updates = new HashMap<>();
+                updates.put("currentXp", newXp);
+                updates.put("quizDoneToday", newQuizDone);
+                updates.put("level", newLevel);
+                updates.put("maxXp", newMaxXp);
+
+                db.collection("users").document(uid).update(updates);
             }
         });
+
+        // 2. Cập nhật Tiến độ khóa học
+        db.collection("users").document(uid).collection("course_progress")
+            .whereEqualTo("courseName", currentCourseName)
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                if (!queryDocumentSnapshots.isEmpty()) {
+                    DocumentSnapshot courseDoc = queryDocumentSnapshots.getDocuments().get(0);
+                    long currentLesson = courseDoc.getLong("currentLesson");
+                    long totalLessons = courseDoc.getLong("totalLessons");
+                    
+                    long nextLesson = currentLesson + 1;
+                    int percent = (int) ((nextLesson * 100) / totalLessons);
+
+                    Map<String, Object> courseUpdate = new HashMap<>();
+                    courseUpdate.put("currentLesson", nextLesson);
+                    courseUpdate.put("percentComplete", Math.min(percent, 100));
+                    courseUpdate.put("lastAccessed", System.currentTimeMillis());
+
+                    db.collection("users").document(uid).collection("course_progress")
+                        .document(courseDoc.getId()).update(courseUpdate);
+                }
+            });
     }
 
     private class QuizCourseAdapter extends RecyclerView.Adapter<QuizCourseAdapter.ViewHolder> {

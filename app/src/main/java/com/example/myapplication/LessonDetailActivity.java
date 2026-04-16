@@ -6,10 +6,14 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import com.example.myapplication.database.AppDatabase;
-import com.example.myapplication.models.CourseProgress;
 import com.example.myapplication.models.Lesson;
-import com.example.myapplication.models.User;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class LessonDetailActivity extends AppCompatActivity {
 
@@ -17,13 +21,16 @@ public class LessonDetailActivity extends AppCompatActivity {
     private Button btnNext;
     private String courseName;
     private int lessonNumber;
-    private User currentUser;
-    private CourseProgress currentCourseProgress;
+    private FirebaseFirestore db;
+    private FirebaseAuth mAuth;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_lesson_detail);
+
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
 
         courseName = getIntent().getStringExtra("course_name");
         lessonNumber = getIntent().getIntExtra("lesson_number", 1);
@@ -41,64 +48,101 @@ public class LessonDetailActivity extends AppCompatActivity {
     }
 
     private void loadLessonData() {
-        AppDatabase db = AppDatabase.getInstance(this);
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            Lesson lesson = db.appDao().getLessonByNumber(courseName, lessonNumber);
-            int userId = getSharedPreferences("user_prefs", MODE_PRIVATE).getInt("user_id", -1);
-            currentUser = db.appDao().getUserById(userId);
-            currentCourseProgress = db.appDao().getCourseProgress(userId, courseName);
+        // Sanitize course name to match the Document ID logic used in MainActivity sync
+        String safeCourseName = courseName.replace("/", "_");
+        String docId = safeCourseName + "_L" + lessonNumber;
 
-            runOnUiThread(() -> {
-                if (lesson != null) {
-                    tvTitle.setText(lesson.getTitle());
-                    tvContent.setText(lesson.getContent());
-                    getSupportActionBar().setTitle("Bài " + lesson.getLessonNumber());
-                }
-            });
-        });
+        db.collection("lessons").document(docId).get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    Lesson lesson = documentSnapshot.toObject(Lesson.class);
+                    if (lesson != null) {
+                        tvTitle.setText(lesson.getTitle());
+                        tvContent.setText(lesson.getContent());
+                        if (getSupportActionBar() != null) {
+                            getSupportActionBar().setTitle("Bài " + lesson.getLessonNumber());
+                        }
+                    } else {
+                        Toast.makeText(this, "Không tìm thấy dữ liệu bài học!", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(this, "Lỗi tải bài học: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
 
-        btnNext.setOnClickListener(v -> completeLesson());
+        btnNext.setOnClickListener(v -> completeLessonOnFirebase());
     }
 
-    private void completeLesson() {
-        AppDatabase db = AppDatabase.getInstance(this);
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            // 1. Cập nhật XP và Mục tiêu trong User
-            if (currentUser != null) {
-                currentUser.setCurrentXp(currentUser.getCurrentXp() + 10);
-                currentUser.setLessonsDoneToday(currentUser.getLessonsDoneToday() + 1);
-                
-                // Kiểm tra lên cấp (ví dụ đơn giản)
-                if (currentUser.getCurrentXp() >= currentUser.getMaxXp()) {
-                    currentUser.setLevel(currentUser.getLevel() + 1);
-                    currentUser.setCurrentXp(0);
-                    currentUser.setMaxXp(currentUser.getMaxXp() + 500);
-                }
-                db.appDao().updateUser(currentUser);
-            }
+    private void completeLessonOnFirebase() {
+        FirebaseUser user = mAuth.getCurrentUser();
+        if (user == null) return;
 
-            // 2. Cập nhật tiến độ khóa học
-            if (currentCourseProgress != null) {
-                if (lessonNumber >= currentCourseProgress.getCurrentLesson()) {
-                    currentCourseProgress.setCurrentLesson(lessonNumber + 1);
-                    int progress = (int) (((float) lessonNumber / currentCourseProgress.getTotalLessons()) * 100);
-                    currentCourseProgress.setPercentComplete(Math.min(progress, 100));
-                    db.appDao().updateCourse(currentCourseProgress);
-                }
-            }
+        String uid = user.getUid();
 
-            // 3. Tìm bài tiếp theo
-            Lesson nextLesson = db.appDao().getLessonByNumber(courseName, lessonNumber + 1);
-            runOnUiThread(() -> {
-                Toast.makeText(this, "+10 XP! Đã cập nhật mục tiêu.", Toast.LENGTH_SHORT).show();
-                if (nextLesson != null) {
-                    lessonNumber++;
-                    loadLessonData();
-                } else {
-                    Toast.makeText(this, "Chúc mừng! Bạn đã hoàn thành khóa học.", Toast.LENGTH_LONG).show();
-                    finish();
+        // 1. Cập nhật User (XP và Mục tiêu ngày)
+        db.collection("users").document(uid).get().addOnSuccessListener(doc -> {
+            if (doc.exists()) {
+                long currentXp = doc.getLong("currentXp");
+                long maxXp = doc.getLong("maxXp");
+                long level = doc.getLong("level");
+                long lessonsDoneToday = doc.contains("lessonsDoneToday") ? doc.getLong("lessonsDoneToday") : 0;
+
+                long newXp = currentXp + 10;
+                long newLessonsDone = lessonsDoneToday + 1;
+                long newLevel = level;
+                long newMaxXp = maxXp;
+
+                if (newXp >= maxXp) {
+                    newLevel++;
+                    newXp = 0;
+                    newMaxXp += 500;
+                }
+
+                Map<String, Object> updates = new HashMap<>();
+                updates.put("currentXp", newXp);
+                updates.put("lessonsDoneToday", newLessonsDone);
+                updates.put("level", newLevel);
+                updates.put("maxXp", newMaxXp);
+
+                db.collection("users").document(uid).update(updates);
+            }
+        });
+
+        // 2. Cập nhật Tiến độ khóa học
+        db.collection("users").document(uid).collection("course_progress")
+            .whereEqualTo("courseName", courseName)
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                if (!queryDocumentSnapshots.isEmpty()) {
+                    DocumentSnapshot courseDoc = queryDocumentSnapshots.getDocuments().get(0);
+                    long totalLessons = courseDoc.getLong("totalLessons");
+                    
+                    int nextLessonNum = lessonNumber + 1;
+                    int progress = (int) (((float) lessonNumber / totalLessons) * 100);
+
+                    Map<String, Object> courseUpdate = new HashMap<>();
+                    courseUpdate.put("currentLesson", nextLessonNum);
+                    courseUpdate.put("percentComplete", Math.min(progress, 100));
+                    courseUpdate.put("lastAccessed", System.currentTimeMillis());
+
+                    db.collection("users").document(uid).collection("course_progress")
+                        .document(courseDoc.getId()).update(courseUpdate);
                 }
             });
-        });
+
+        // 3. Tìm bài tiếp theo trong Firebase
+        db.collection("lessons")
+                .whereEqualTo("courseName", courseName)
+                .whereEqualTo("lessonNumber", lessonNumber + 1)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    if (!queryDocumentSnapshots.isEmpty()) {
+                        lessonNumber++;
+                        loadLessonData();
+                        Toast.makeText(this, "+10 XP! Đã cập nhật mục tiêu ngày.", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Chúc mừng! Bạn đã hoàn thành khóa học.", Toast.LENGTH_LONG).show();
+                        finish();
+                    }
+                });
     }
 }

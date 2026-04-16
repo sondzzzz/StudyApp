@@ -11,8 +11,10 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.example.myapplication.database.AppDatabase;
+import android.widget.Toast;
 import com.example.myapplication.models.Lesson;
+import com.google.firebase.firestore.FirebaseFirestore;
+import java.util.Collections;
 import java.util.List;
 
 public class LessonListActivity extends AppCompatActivity {
@@ -42,13 +44,19 @@ public class LessonListActivity extends AppCompatActivity {
     }
 
     private void loadLessons() {
-        AppDatabase db = AppDatabase.getInstance(this);
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            List<Lesson> lessons = db.appDao().getLessonsByCourse(courseName);
-            runOnUiThread(() -> {
-                rvLessons.setAdapter(new LessonAdapter(lessons));
-            });
-        });
+        FirebaseFirestore firestore = FirebaseFirestore.getInstance();
+        firestore.collection("lessons")
+                .whereEqualTo("courseName", courseName)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    List<Lesson> lessons = queryDocumentSnapshots.toObjects(Lesson.class);
+                    // Sort lessons by lessonNumber as Firestore doesn't guarantee order
+                    Collections.sort(lessons, (l1, l2) -> Integer.compare(l1.getLessonNumber(), l2.getLessonNumber()));
+                    rvLessons.setAdapter(new LessonAdapter(lessons));
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(this, "Lỗi tải danh sách bài học: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
     }
 
     class LessonAdapter extends RecyclerView.Adapter<LessonAdapter.LessonViewHolder> {

@@ -16,10 +16,13 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.myapplication.database.AppDatabase;
 import com.example.myapplication.models.CourseProgress;
 import com.example.myapplication.models.DailyGoal;
 import com.example.myapplication.models.User;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.Calendar;
 import java.util.List;
@@ -34,13 +37,17 @@ public class HomeFragment extends Fragment {
     private CourseAdapter courseAdapter;
     
     private User currentUser;
+    private FirebaseFirestore db;
+    private FirebaseAuth mAuth;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_home, container, false);
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
         initViews(view);
-        loadDataFromDatabase();
+        loadDataFromFirebase();
         return view;
     }
 
@@ -73,7 +80,7 @@ public class HomeFragment extends Fragment {
             if (currentUser == null) return;
             showEditGoalDialog(getString(R.string.lessons), currentUser.getTargetLessons(), newGoal -> {
                 currentUser.setTargetLessons(newGoal);
-                updateUserInDb();
+                updateUserInFirebase("targetLessons", newGoal);
             });
         });
 
@@ -81,7 +88,7 @@ public class HomeFragment extends Fragment {
             if (currentUser == null) return;
             showEditGoalDialog(getString(R.string.flashcards), currentUser.getTargetFlashcards(), newGoal -> {
                 currentUser.setTargetFlashcards(newGoal);
-                updateUserInDb();
+                updateUserInFirebase("targetFlashcards", newGoal);
             });
         });
 
@@ -89,7 +96,7 @@ public class HomeFragment extends Fragment {
             if (currentUser == null) return;
             showEditGoalDialog(getString(R.string.quiz), currentUser.getTargetQuiz(), newGoal -> {
                 currentUser.setTargetQuiz(newGoal);
-                updateUserInDb();
+                updateUserInFirebase("targetQuiz", newGoal);
             });
         });
 
@@ -97,19 +104,18 @@ public class HomeFragment extends Fragment {
             if (currentUser == null) return;
             showEditGoalDialog(getString(R.string.time), currentUser.getTargetTime(), newGoal -> {
                 currentUser.setTargetTime(newGoal);
-                updateUserInDb();
+                updateUserInFirebase("targetTime", newGoal);
             });
         });
     }
 
-    private void updateUserInDb() {
-        AppDatabase db = AppDatabase.getInstance(requireContext());
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            db.appDao().updateUser(currentUser);
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(this::loadDataFromDatabase);
-            }
-        });
+    private void updateUserInFirebase(String field, int value) {
+        FirebaseUser user = mAuth.getCurrentUser();
+        if (user != null) {
+            db.collection("users").document(user.getUid())
+                .update(field, value)
+                .addOnSuccessListener(aVoid -> loadDataFromFirebase());
+        }
     }
 
     private void showEditGoalDialog(String title, int currentTarget, OnGoalUpdateListener listener) {
@@ -138,45 +144,74 @@ public class HomeFragment extends Fragment {
         AlertDialog dialog = builder.create();
         dialog.show();
         
-        // Tùy chỉnh màu nút sau khi show
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(getResources().getColor(R.color.purple_primary));
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(getResources().getColor(R.color.text_color_secondary));
     }
 
-    private void loadDataFromDatabase() {
-        SharedPreferences prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE);
-        int userId = prefs.getInt("user_id", -1);
+    private void loadDataFromFirebase() {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        if (firebaseUser == null) return;
 
-        if (userId == -1) return;
+        db.collection("users").document(firebaseUser.getUid())
+            .get()
+            .addOnSuccessListener(documentSnapshot -> {
+                if (documentSnapshot.exists()) {
+                    currentUser = mapDocumentToUser(documentSnapshot);
+                    
+                    DailyGoal userGoals = new DailyGoal(
+                            currentUser.getLessonsDoneToday(), currentUser.getTargetLessons(), 
+                            currentUser.getFlashcardsDoneToday(), currentUser.getTargetFlashcards(), 
+                            currentUser.getQuizDoneToday(), currentUser.getTargetQuiz(),
+                            0, 
+                            currentUser.getTargetTime());
+                            
+                    bindData(currentUser, userGoals);
+                    loadCoursesFromFirebase(firebaseUser.getUid());
+                }
+            });
+    }
 
-        AppDatabase db = AppDatabase.getInstance(requireContext());
-        
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            currentUser = db.appDao().getUserById(userId);
-            List<CourseProgress> allCourses = db.appDao().getCoursesByUserId(userId);
-            
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    if (currentUser != null) {
-                        // Sử dụng dữ liệu thực từ database
-                        DailyGoal userGoals = new DailyGoal(
-                                currentUser.getLessonsDoneToday(), currentUser.getTargetLessons(), 
-                                currentUser.getFlashcardsDoneToday(), currentUser.getTargetFlashcards(), 
-                                currentUser.getQuizDoneToday(), currentUser.getTargetQuiz(),
-                                0, // minutesDone
-                                currentUser.getTargetTime());
-                                
-                        bindData(currentUser, userGoals);
-                        
-                        courseAdapter = new CourseAdapter(allCourses);
+    private void loadCoursesFromFirebase(String userId) {
+        db.collection("users").document(userId).collection("course_progress")
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                List<CourseProgress> courses = queryDocumentSnapshots.toObjects(CourseProgress.class);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        courseAdapter = new CourseAdapter(courses);
                         rvCourses.setAdapter(courseAdapter);
-                    }
-                });
-            }
-        });
+                    });
+                }
+            });
+    }
+
+    private void loadCoursesFromRoom() {
+        // Method replaced by loadCoursesFromFirebase
+    }
+
+    private User mapDocumentToUser(DocumentSnapshot doc) {
+        User user = new User("", "", doc.getString("fullName"), 
+                doc.getLong("streak").intValue(), 
+                doc.getLong("currentXp").intValue(), 
+                doc.getLong("maxXp").intValue(), 
+                doc.getLong("level").intValue());
+        
+        user.setTargetLessons(doc.getLong("targetLessons").intValue());
+        user.setTargetFlashcards(doc.getLong("targetFlashcards").intValue());
+        user.setTargetQuiz(doc.getLong("targetQuiz").intValue());
+        user.setTargetTime(doc.getLong("targetTime").intValue());
+        
+        // Cần đảm bảo các field này có trong Firestore hoặc xử lý null
+        if (doc.contains("lessonsDoneToday")) user.setLessonsDoneToday(doc.getLong("lessonsDoneToday").intValue());
+        if (doc.contains("flashcardsDoneToday")) user.setFlashcardsDoneToday(doc.getLong("flashcardsDoneToday").intValue());
+        if (doc.contains("quizDoneToday")) user.setQuizDoneToday(doc.getLong("quizDoneToday").intValue());
+        
+        return user;
     }
 
     private void bindData(User user, DailyGoal goals) {
+        if (!isAdded()) return;
+
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         if (hour < 12) {
             tvGreeting.setText(R.string.good_morning);

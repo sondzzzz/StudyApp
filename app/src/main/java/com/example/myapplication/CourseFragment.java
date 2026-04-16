@@ -15,13 +15,19 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.myapplication.database.AppDatabase;
+
 import com.example.myapplication.models.AvailableCourse;
 import com.example.myapplication.models.CourseProgress;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class CourseFragment extends Fragment {
 
@@ -30,12 +36,17 @@ public class CourseFragment extends Fragment {
     private TextView tvTotalCourses;
     private FloatingActionButton fabAddCourse;
     private List<AvailableCourse> availableCoursesList;
+    private FirebaseFirestore db;
+    private FirebaseAuth mAuth;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_course, container, false);
         
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
+
         tvTotalCourses = view.findViewById(R.id.tv_total_courses);
         rvAllCourses = view.findViewById(R.id.rv_all_courses);
         fabAddCourse = view.findViewById(R.id.fab_add_course);
@@ -43,14 +54,11 @@ public class CourseFragment extends Fragment {
         rvAllCourses.setLayoutManager(new LinearLayoutManager(getContext()));
 
         setupAvailableCourses();
-        loadUserCourses();
-
-        SharedPreferences prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE);
-        int userId = prefs.getInt("user_id", -1);
+        loadUserCoursesFromFirebase();
 
         fabAddCourse.setOnClickListener(v -> {
-            if (userId != -1) {
-                showCourseSelectionDialog(userId);
+            if (mAuth.getCurrentUser() != null) {
+                showCourseSelectionDialog();
             }
         });
         
@@ -66,17 +74,17 @@ public class CourseFragment extends Fragment {
         availableCoursesList.add(new AvailableCourse("Cấu trúc dữ liệu & Giải thuật", 40, android.R.drawable.ic_menu_sort_alphabetically));
     }
 
-    private void loadUserCourses() {
-        SharedPreferences prefs = requireContext().getSharedPreferences("user_prefs", Context.MODE_PRIVATE);
-        int userId = prefs.getInt("user_id", -1);
-        if (userId == -1) return;
+    private void loadUserCoursesFromFirebase() {
+        FirebaseUser user = mAuth.getCurrentUser();
+        if (user == null) return;
 
-        AppDatabase db = AppDatabase.getInstance(requireContext());
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            List<CourseProgress> userCourses = db.appDao().getCoursesByUserId(userId);
-            
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
+        db.collection("users").document(user.getUid())
+            .collection("course_progress")
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                List<CourseProgress> userCourses = queryDocumentSnapshots.toObjects(CourseProgress.class);
+
+                if (isAdded()) {
                     tvTotalCourses.setText("Khóa học đang tham gia: " + userCourses.size());
                     adapter = new CourseListAdapter(userCourses, course -> {
                         android.content.Intent intent = new android.content.Intent(getContext(), LessonListActivity.class);
@@ -84,12 +92,16 @@ public class CourseFragment extends Fragment {
                         startActivity(intent);
                     });
                     rvAllCourses.setAdapter(adapter);
-                });
-            }
-        });
+                }
+            })
+            .addOnFailureListener(e -> {
+                if (isAdded()) {
+                    Toast.makeText(getContext(), "Lỗi tải khóa học: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
     }
 
-    private void showCourseSelectionDialog(int userId) {
+    private void showCourseSelectionDialog() {
         String[] courseNames = new String[availableCoursesList.size()];
         for (int i = 0; i < availableCoursesList.size(); i++) {
             courseNames[i] = availableCoursesList.get(i).getName();
@@ -99,34 +111,42 @@ public class CourseFragment extends Fragment {
         builder.setTitle("Chọn khóa học mới");
         builder.setItems(courseNames, (dialog, which) -> {
             AvailableCourse selected = availableCoursesList.get(which);
-            enrollCourse(userId, selected);
+            enrollCourseFirebase(selected);
         });
         builder.show();
     }
 
-    private void enrollCourse(int userId, AvailableCourse course) {
-        AppDatabase db = AppDatabase.getInstance(requireContext());
-        AppDatabase.databaseWriteExecutor.execute(() -> {
-            List<CourseProgress> current = db.appDao().getCoursesByUserId(userId);
-            for (CourseProgress cp : current) {
-                if (cp.getCourseName().equals(course.getName())) {
-                    if (getActivity() != null) {
-                        getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "Bạn đã tham gia khóa học này rồi!", Toast.LENGTH_SHORT).show());
-                    }
+    private void enrollCourseFirebase(AvailableCourse course) {
+        FirebaseUser user = mAuth.getCurrentUser();
+        if (user == null) return;
+
+        // Kiểm tra xem đã đăng ký chưa
+        db.collection("users").document(user.getUid())
+            .collection("course_progress")
+            .whereEqualTo("courseName", course.getName())
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                if (!queryDocumentSnapshots.isEmpty()) {
+                    Toast.makeText(getContext(), "Bạn đã tham gia khóa học này rồi!", Toast.LENGTH_SHORT).show();
                     return;
                 }
-            }
 
-            CourseProgress newEnrollment = new CourseProgress(userId, course.getName(), 0, course.getTotalLessons(), 0, course.getIconResId());
-            newEnrollment.setLastAccessed(System.currentTimeMillis());
-            db.appDao().insertCourse(newEnrollment);
+                // Thêm khóa học mới
+                Map<String, Object> newEnrollment = new HashMap<>();
+                newEnrollment.put("courseName", course.getName());
+                newEnrollment.put("currentLesson", 0);
+                newEnrollment.put("totalLessons", course.getTotalLessons());
+                newEnrollment.put("percentComplete", 0);
+                newEnrollment.put("iconResId", course.getIconResId());
+                newEnrollment.put("lastAccessed", System.currentTimeMillis());
 
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    Toast.makeText(getContext(), "Đã thêm khóa học: " + course.getName(), Toast.LENGTH_SHORT).show();
-                    loadUserCourses();
-                });
-            }
-        });
+                db.collection("users").document(user.getUid())
+                    .collection("course_progress")
+                    .add(newEnrollment)
+                    .addOnSuccessListener(documentReference -> {
+                        Toast.makeText(getContext(), "Đã thêm khóa học: " + course.getName(), Toast.LENGTH_SHORT).show();
+                        loadUserCoursesFromFirebase();
+                    });
+            });
     }
 }
