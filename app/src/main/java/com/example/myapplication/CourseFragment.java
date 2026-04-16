@@ -67,11 +67,16 @@ public class CourseFragment extends Fragment {
 
     private void setupAvailableCourses() {
         availableCoursesList = new ArrayList<>();
-        availableCoursesList.add(new AvailableCourse("Lập trình Android nâng cao", 25, android.R.drawable.ic_lock_idle_lock));
-        availableCoursesList.add(new AvailableCourse("Java Cơ bản", 15, android.R.drawable.ic_menu_view));
-        availableCoursesList.add(new AvailableCourse("Python cho Data Science", 30, android.R.drawable.btn_star_big_on));
-        availableCoursesList.add(new AvailableCourse("Thiết kế UI/UX", 10, android.R.drawable.ic_menu_gallery));
-        availableCoursesList.add(new AvailableCourse("Cấu trúc dữ liệu & Giải thuật", 40, android.R.drawable.ic_menu_sort_alphabetically));
+        db.collection("available_courses")
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                availableCoursesList = queryDocumentSnapshots.toObjects(AvailableCourse.class);
+            })
+            .addOnFailureListener(e -> {
+                if (isAdded()) {
+                    Toast.makeText(getContext(), "Không thể tải danh sách khóa học: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
     }
 
     private void loadUserCoursesFromFirebase() {
