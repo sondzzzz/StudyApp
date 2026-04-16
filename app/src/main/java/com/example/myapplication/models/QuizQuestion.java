@@ -3,7 +3,6 @@ package com.example.myapplication.models;
 import java.io.Serializable;
 
 public class QuizQuestion implements Serializable {
-    private int id;
     private String courseName;
     private String question;
     private String optionA;
@@ -25,8 +24,6 @@ public class QuizQuestion implements Serializable {
         this.correctAnswer = correctAnswer;
     }
 
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
     public String getCourseName() { return courseName; }
     public void setCourseName(String courseName) { this.courseName = courseName; }
     public String getQuestion() { return question; }

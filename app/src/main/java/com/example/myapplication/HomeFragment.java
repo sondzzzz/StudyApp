@@ -185,9 +185,7 @@ public class HomeFragment extends Fragment {
             });
     }
 
-    private void loadCoursesFromRoom() {
-        // Method replaced by loadCoursesFromFirebase
-    }
+
 
     private User mapDocumentToUser(DocumentSnapshot doc) {
         User user = new User("", "", doc.getString("fullName"), 

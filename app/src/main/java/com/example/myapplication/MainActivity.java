@@ -22,7 +22,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Cấu hình thanh trạng thái trong suốt
+        // Cấu hình thanh trạng thái
         Window window = getWindow();
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -33,19 +33,18 @@ public class MainActivity extends AppCompatActivity {
 
         BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
 
-        // Xử lý Bottom Navigation không bị che bởi thanh điều hướng hệ thống
+        // Xử lý Bottom Navigation không bị che
         ViewCompat.setOnApplyWindowInsetsListener(bottomNav, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(0, 0, 0, systemBars.bottom);
             return insets;
         });
 
-        // Hiển thị HomeFragment mặc định khi khởi chạy
+        // Hiển thị HomeFragment mặc định
         if (savedInstanceState == null) {
             replaceFragment(new HomeFragment());
         }
 
-        // Sự kiện click trên Bottom Navigation
         bottomNav.setOnItemSelectedListener(item -> {
             int itemId = item.getItemId();
             if (itemId == R.id.nav_home) {

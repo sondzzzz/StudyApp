@@ -3,7 +3,6 @@ package com.example.myapplication.models;
 import java.io.Serializable;
 
 public class Lesson implements Serializable {
-    private int id;
     private String courseName;
     private int lessonNumber;
     private String title;
@@ -19,8 +18,6 @@ public class Lesson implements Serializable {
         this.content = content;
     }
 
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
     public String getCourseName() { return courseName; }
     public void setCourseName(String courseName) { this.courseName = courseName; }
     public int getLessonNumber() { return lessonNumber; }
